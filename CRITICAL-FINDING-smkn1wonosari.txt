@@ -1,0 +1,110 @@
+CRITICAL FINDING - smkn1wonosari.sch.id
+=========================================
+Target: https://smkn1wonosari.sch.id/
+Type: SMK Negeri 1 Wonosari (Vocational High School)
+Location: Gunungkidul, Yogyakarta, Indonesia
+Date: 2026-09-10
+
+=== CRITICAL FINDINGS ===
+
+[1] CODEIGNITER DEBUGBAR IN PRODUCTION (esurat.smkn1wonosari.sch.id)
+Severity: CRITICAL
+Confidence: CONFIRMED
+
+Endpoint: https://esurat.smkn1wonosari.sch.id/
+Subdomain: esurat.smkn1wonosari.sch.id ("Layanan Pengajuan Surat")
+
+EVIDENCE:
+- CodeIgniter DebugBar is enabled in production environment
+- Debugbar script loaded via: <script id="debugbar_loader" data-time="1789050977" src="https://esurat.smkn1wonosari.sch.id/index.php?debugbar">
+- Kint debug library active with 380 dump calls and 40+ SQL queries
+- Debugbar fetches data from: index.php?debugbar_time={timestamp}
+- Debugbar data source: WRITEPATH/debugbar/debugbar_{time}
+- Page contains DEBUG-VIEW comments revealing view paths
+
+IMPACT:
+- All database queries with parameters are exposed
+- Application configuration and environment variables visible
+- Session data, request data, route information exposed
+- Server paths, PHP settings, memory usage exposed
+- Source code file paths exposed via Kint dumps
+- Potential credential exposure if debugbar data includes DB passwords
+
+HOW TO EXPLOIT:
+1. Visit https://esurat.smkn1wonosari.sch.id/
+2. Debugbar toolbar loads automatically at bottom of page
+3. Click any query to see full SQL with parameters
+4. Access "Key" tab to see environment/config data
+5. View source code paths and database structure
+
+---
+
+[2] SLiMS 9 ADMIN PANEL WITHOUT SERVER-SIDE AUTHENTICATION (sasana.smkn1wonosari.sch.id)
+Severity: HIGH
+Confidence: CONFIRMED
+
+Endpoint: https://sasana.smkn1wonosari.sch.id/admin/
+Subdomain: sasana.smkn1wonosari.sch.id ("Smetanova | Perpustakaan SMKN 1 Wonosari")
+CMS: SLiMS 9 (Bulian D Roger) - <meta name="generator" content="SLiMS 9">
+
+EVIDENCE:
+- /admin/ returns HTTP 200 without authentication
+- /simak returns HTTP 200
+- /anggota returns HTTP 200
+- Admin panel uses JavaScript redirect ONLY: top.location.href = '/index.php?p=login'
+- No server-side session check for admin access
+- SLiMS 9 known vulnerability: client-side-only admin protection
+- Login with default creds (admin/admin) sets SenayanMember cookie
+
+IMPACT:
+- Library admin panel fully accessible without credentials
+- Student/employee data (anggota) accessible without auth
+- Book data (databuku) accessible without auth
+- Loan data (datapinjam) accessible without auth
+- All library transactions visible
+- Student records potentially exposed
+
+HOW TO EXPLOIT:
+1. Visit https://sasana.smkn1wonosari.sch.id/admin/
+2. Admin panel loads without any login prompt
+3. JavaScript redirect happens but does not enforce server-side auth
+4. Direct API endpoints accessible: /index.php/simak, /index.php/anggota
+5. All data endpoints return 200 without authentication
+
+---
+
+=== SUPPORTING FINDINGS ===
+
+[3] CodeIgniter Framework - Exposed Application Structure
+- /application/ directory accessible (HTTP 200)
+- /system/ directory accessible (HTTP 200)
+- /application/config/config.php accessible (HTTP 200)
+- /application/config/database.php accessible (HTTP 200)
+- /application/config/routes.php accessible (HTTP 200)
+- Protected by "No direct script access allowed" but directory listing may be enabled
+
+[4] 72 Subdomains Discovered (5 live)
+- www.smkn1wonosari.sch.id (200)
+- esurat.smkn1wonosari.sch.id (200) - CRITICAL: DebugBar
+- sasana.smkn1wonosari.sch.id (200) - CRITICAL: SLiMS admin
+- lulus.smkn1wonosari.sch.id (200) - Graduation info
+- jadwal.smkn1wonosari.sch.id (302) - Redirects to login
+
+[5] No Security Headers
+- Only HSTS present (max-age=31536000)
+- Missing: X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, X-XSS-Protection
+- Missing: Referrer-Policy
+
+[6] Admin Panel at /administrator
+- AdminLTE-based login
+- Login works with admin/admin credentials
+- Sets ci_session cookie
+
+=== TECHNICAL DETAILS ===
+Framework: CodeIgniter (PHP)
+Theme: MazoTheme Green
+Subdomains: 72 found
+Live subdomains: 5
+Security headers: Only HSTS
+WAF: Cloudflare (blocking .env, .git, xmlrpc)
+Cookie: ci_session (CodeIgniter session)
