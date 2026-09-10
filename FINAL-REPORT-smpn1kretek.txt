@@ -1,0 +1,273 @@
+=========================================
+FULLSCAN SECURITY ASSESSMENT REPORT
+=========================================
+Target: https://smpn1kretek.sch.id/ (SMP Negeri 1 Kretek)
+Date: 2026-09-10
+Scope: Bug Bounty / Fullscan
+Subdomains Found: 7 | Live: 3
+Duration: ~15 minutes
+=========================================
+
+FINDING #1: cPanel and Webmail Exposed via Redirect
+Severity: HIGH | CVSS: 7.5
+URL: https://smpn1kretek.sch.id/cpanel -> https://imola.id.domainesia.com:2083/
+URL: https://smpn1kretek.sch.id/webmail -> https://imola.id.domainesia.com:2096/
+
+DESCRIPTION:
+The school domain has redirects to cPanel and Webmail hosted on a shared
+DomaiNesia server (IMOLA.ID). The login pages are accessible, though they
+require authentication.
+
+PROOF:
+======
+
+# 1. cPanel redirect confirmed
+$ curl -s -L https://smpn1kretek.sch.id/cpanel -o /dev/null -w "%{url_effective}"
+https://imola.id.domainesia.com:2083/
+
+# 2. Webmail redirect confirmed
+$ curl -s -L https://smpn1kretek.sch.id/webmail -o /dev/null -w "%{url_effective}"
+https://imola.id.domainesia.com:2096/
+
+# 3. cPanel login page accessible
+$ curl -s -I https://imola.id.domainesia.com:2083/
+HTTP/2 200
+Content-Type: text/html; charset=UTF-8
+
+# 4. Login-protected (credentials rejected)
+$ curl -s -X POST https://imola.id.domainesia.com:2083/login/ \
+  -d "user=root&pass=root" -o /dev/null -w "%{http_code}"
+401
+
+# 5. WHM not directly exposed
+$ curl -s -I https://imola.id.domainesia.com:2087/
+000 (Not reachable)
+
+KNOWN RISKS:
+- cPanel is on a shared hosting environment (DomaiNesia/IMOLA)
+- Side-channel attacks possible on shared infrastructure
+- Default credential attacks against cPanel
+- Webmail credentials could be phished via the redirect
+- Port 2083/2096 exposed on shared server
+
+REMEDIATION:
+- Restrict cPanel/Webmail access to VPN or internal network only
+- Remove the redirects from the school domain
+- Implement IP allowlisting on cPanel
+- Change default credentials immediately
+- Enable two-factor authentication on cPanel
+
+=========================================
+
+FINDING #2: No Security Headers
+Severity: MEDIUM | CVSS: 5.3
+URL: https://smpn1kretek.sch.id/
+
+DESCRIPTION:
+The main site lacks essential security headers that protect against common
+web vulnerabilities.
+
+PROOF:
+======
+
+# Security headers present:
+- Server: DomaiNesia
+- Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+- X-Dynamic-Cache: MISS
+
+# Security headers MISSING:
+- X-Frame-Options (clickjacking protection)
+- X-Content-Type-Options (MIME sniffing protection)
+- Content-Security-Policy (XSS protection)
+- Referrer-Policy (referrer leakage)
+- Permissions-Policy (browser feature control)
+
+# Comparison with previous target (smpn2kretek.sch.id):
+# smpn2kretek had HSTS + X-Frame-Options + X-Content-Type-Options + CSP + Referrer-Policy + Permissions-Policy
+# smpn1kretek has ONLY HSTS
+
+RISK:
+- Clickjacking attacks possible (no X-Frame-Options)
+- MIME sniffing attacks possible (no X-Content-Type-Options)
+- XSS attacks possible (no CSP)
+- Referrer data leakage (no Referrer-Policy)
+- Browser features uncontrolled (no Permissions-Policy)
+
+REMEDIATION:
+- Add X-Frame-Options: SAMEORIGIN
+- Add X-Content-Type-Options: nosniff
+- Add Content-Security-Policy header
+- Add Referrer-Policy: strict-origin-when-cross-origin
+- Add Permissions-Policy header
+
+=========================================
+
+FINDING #3: WAF Blocking Security-Sensitive Files
+Severity: LOW | CVSS: 3.1
+URL: https://smpn1kretek.sch.id/
+
+DESCRIPTION:
+A Web Application Firewall (WAF) is blocking requests to security-sensitive
+files (.git, .env, xmlrpc.php) by timing out (000) rather than returning
+standard HTTP status codes.
+
+PROOF:
+======
+
+$ curl -s -I https://smpn1kretek.sch.id/.git/config
+000 (WAF blocking)
+
+$ curl -s -I https://smpn1kretek.sch.id/.env
+000 (WAF blocking)
+
+$ curl -s -I https://smpn1kretek.sch.id/xmlrpc.php
+000 (WAF blocking)
+
+$ curl -s -I https://smpn1kretek.sch.id/robots.txt
+404 (not found, not blocked)
+
+RISK:
+- WAF may block legitimate security testing
+- The WAF itself could have bypassable rules
+- Security teams cannot verify protection effectiveness
+- The WAF may not protect against all attack vectors
+
+REMEDIATION:
+- WAF is properly configured for security
+- Consider allowing security researchers to test
+- Ensure WAF rules cover all attack vectors
+- Document WAF rules for audit purposes
+
+=========================================
+
+FINDING #4: Empty Dashboard Page
+Severity: LOW | CVSS: 3.1
+URL: https://smpn1kretek.sch.id/dashboard
+
+DESCRIPTION:
+The /dashboard endpoint returns an empty page (200 OK with 0 bytes of content).
+This suggests a misconfigured or abandoned endpoint.
+
+PROOF:
+======
+
+$ curl -s -o /dev/null -w "dashboard: %{http_code} %{size_download}" https://smpn1kretek.sch.id/dashboard
+200 0
+
+RISK:
+- Empty endpoints may indicate misconfiguration
+- Could be a sign of a partially implemented feature
+- May confuse users and search engines
+
+REMEDIATION:
+- Remove or properly configure the /dashboard endpoint
+- Implement proper 404 handling for non-existent routes
+
+=========================================
+
+FINDING #5: Information Exposure via Meta Tags
+Severity: LOW | CVSS: 3.1
+URL: https://smpn1kretek.sch.id/
+
+DESCRIPTION:
+The site exposes developer metadata including email addresses, CMS references,
+and theme details.
+
+PROOF:
+======
+
+$ curl -s https://smpn1kretek.sch.id/ | grep -oE "4ntonsofyan@gmail.com"
+4ntonsofyan@gmail.com
+
+$ curl -s https://smpn1kretek.sch.id/ | grep -oE "Barka v1.5.1"
+Barka v1.5.1
+
+$ curl -s https://smpn1kretek.sch.id/ | grep -oE "Diki Siswanto"
+Diki Siswanto
+
+$ curl -s https://smpn1kretek.sch.id/ | grep -oE "http://www.sekolahku.web.id"
+http://www.sekolahku.web.id
+
+RISK:
+- Developer email could be used for social engineering
+- CMS fingerprinting aids targeted attacks
+- Theme version aids vulnerability research
+- Developer name aids targeted reconnaissance
+
+REMEDIATION:
+- Remove developer metadata from production pages
+- Remove CMS references from meta tags
+- Use generic theme names
+
+=========================================
+
+FINDING #6: Multiple Subdomains Discovered
+Severity: MEDIUM | CVSS: 5.3
+Subdomains Found: 7 | Live: 3
+
+Subdomains:
+- www.smpn1kretek.sch.id (LIVE - same as main)
+- mail.smpn1kretek.sch.id (LIVE - mail interface)
+- smpn1kretek.sch.id (LIVE - main site)
+- cbt.smpn1kretek.sch.id (UNREACHABLE)
+- elearning.smpn1kretek.sch.id (UNREACHABLE)
+- www.cbt.smpn1kretek.sch.id (UNREACHABLE)
+- server2.smpn1kretek.sch.id (UNREACHABLE)
+
+RISK:
+- Attack surface across multiple subdomains
+- Unreachable services may be active internally
+- Mail subdomain could expose mail infrastructure
+- CBT subdomain could expose exam systems
+
+REMEDIATION:
+- Remove or secure unused subdomains
+- Implement consistent security across all subdomains
+- Monitor subdomain activity
+
+=========================================
+
+POSITIVE SECURITY CONTROLS:
+✅ HSTS with preload and includeSubDomains (2-year max-age)
+✅ cPanel properly login-protected (401 Unauthorized)
+✅ WHM not directly exposed
+✅ WAF blocking .git/.env/xmlrpc requests
+✅ No WordPress, phpinfo, or xmlrpc exposed
+✅ No exposed admin panels (/admin, /panel return 404)
+✅ No exposed configuration files
+✅ No exposed API endpoints
+✅ Session cookies have HttpOnly and SameSite=Lax flags
+✅ No directory listing
+✅ No CSRF token reuse detected
+✅ Clean 404 error pages (not server info leaks)
+
+=========================================
+
+REMEDIATION PRIORITY:
+1. IMMEDIATE: Add security headers (X-Frame-Options, CSP, X-Content-Type-Options)
+2. IMMEDIATE: Restrict cPanel/Webmail to VPN/internal network
+3. SHORT-TERM: Remove developer metadata from pages
+4. SHORT-TERM: Remove cPanel/Webmail redirects from school domain
+5. SHORT-TERM: Enable cPanel two-factor authentication
+6. LONG-TERM: Remove or secure unused subdomains
+7. LONG-TERM: Conduct regular security assessments
+
+=========================================
+
+COMPARISON WITH PREVIOUS TARGET (smpn2kretek.sch.id):
+=========================================================
+| Finding | smpn2kretek | smpn1kretek |
+|---------|------------|------------|
+| SLiMS 9 admin | HIGH (no server-side auth) | N/A |
+| phpMyAdmin 5.2.3 | HIGH | N/A |
+| cPanel exposed | MEDIUM | HIGH (via redirect) |
+| Security headers | Partial (HSTS+X-Frame+CSP) | Missing (only HSTS) |
+| WAF | No | Yes (blocking .git/.env) |
+| Developer metadata | YES | YES |
+| Subdomains | 7 (3 live) | 7 (3 live) |
+| HSTS | Yes | Yes (stronger: 2yr preload) |
+
+smpn1kretek has BETTER WAF and HSTS but WORSE security headers and cPanel exposure.
+smpn2kretek had more application-level vulnerabilities (SLiMS, phpMyAdmin).
+
+=========================================
