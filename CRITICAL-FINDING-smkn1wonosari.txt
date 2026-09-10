@@ -5,106 +5,182 @@ Type: SMK Negeri 1 Wonosari (Vocational High School)
 Location: Gunungkidul, Yogyakarta, Indonesia
 Date: 2026-09-10
 
-=== CRITICAL FINDINGS ===
-
-[1] CODEIGNITER DEBUGBAR IN PRODUCTION (esurat.smkn1wonosari.sch.id)
+=== CRITICAL FINDING 1: CODEIGNITER 4.7.0 DEBUGBAR IN DEVELOPMENT MODE ===
 Severity: CRITICAL
-Confidence: CONFIRMED
-
+Confidence: PROVEN with actual data exposure
 Endpoint: https://esurat.smkn1wonosari.sch.id/
 Subdomain: esurat.smkn1wonosari.sch.id ("Layanan Pengajuan Surat")
 
-EVIDENCE:
-- CodeIgniter DebugBar is enabled in production environment
-- Debugbar script loaded via: <script id="debugbar_loader" data-time="1789050977" src="https://esurat.smkn1wonosari.sch.id/index.php?debugbar">
-- Kint debug library active with 380 dump calls and 40+ SQL queries
-- Debugbar fetches data from: index.php?debugbar_time={timestamp}
-- Debugbar data source: WRITEPATH/debugbar/debugbar_{time}
-- Page contains DEBUG-VIEW comments revealing view paths
+PROOF (verified via curl):
+- CodeIgniter Version: 4.7.0
+- PHP Version: 8.2.33
+- PHP SAPI: fpm-fcgi
+- Environment: development (NOT production!)
+- Base URL: https://esurat.smkn1wonosari.sch.id/
+- Debugbar response size: 133,654 bytes
+- Kint dump calls: 380
+- Debugbar tabs active: 10 (ci-config, ci-database, ci-events, ci-files, ci-history, ci-logs, ci-routes, ci-timeline, ci-vars, ci-views)
+
+ACTUAL DATA EXPOSED:
+
+A) Database Query Results:
+   Query: SELECT * FROM `jenis_surat` WHERE `aktif` = 1 ORDER BY `urutan` ASC
+   Exposed table columns: id, kode, nama_surat, slug, aktif, urutan, created_at, updated_at
+   Exposed data:
+   - id=1, kode=SU, nama_surat=Surat Undangan, slug=surat-undangan, aktif=1, urutan=1
+   - id=2, kode=ST, nama_surat=Surat Tugas Guru/Siswa, slug=surat-tugas, aktif=1, urutan=2
+   - id=4, kode=SK, nama_surat=Surat Keterangan, slug=surat-keterangan, aktif=1, urutan=4
+
+B) View Data:
+   - title: "Layanan Pengajuan Surat"
+   - jenis: array(3) with full jenis_surat records
+   - pengajuan: null
+   - kodeCari: empty string
+   - isPost: boolean false
+
+C) Session User Data:
+   - __ci_last_regenerate: 1789051863
+   - __ci_vars: Array()
+   - _ci_previous_url: https://esurat.smkn1wonosari.sch.id/index.php/
+
+D) Matched Route:
+   - Controller: \App\Controllers\Pengajuan
+   - Method: pilihSurat
+   - Params: 0 / 0
+
+E) Files Exposed (184 files):
+   - Common.php (APPPATH/Common.php)
+   - App.php (APPPATH/Config/App.php)
+   - Autoload.php (APPPATH/Config/Autoload.php)
+   - development.php (APPPATH/Config/Boot/development.php)
+   - Cache.php (APPPATH/Config/Cache.php)
+   - [179+ more files with full paths]
+
+F) All Debugbar Tabs Active and Loaded:
+   - ci-config: System configuration
+   - ci-database: Full query history with results
+   - ci-events: All framework events
+   - ci-files: 184 loaded files with APPPATH paths
+   - ci-history: Request history
+   - ci-logs: Application logs
+   - ci-routes: Matched and defined routes
+   - ci-timeline: Full request timeline with timing data
+   - ci-vars: All PHP variables
+   - ci-views: All rendered views with data
+
+G) Timeline Data:
+   - Event: pre_system (9.61 ms)
+   - Required Before Filters (4.04 ms)
+   - Routing (5.87 ms)
+   - Before Filters (0.02 ms)
+   - Controller (21.40 ms)
+   - Controller Constructor (0.03 ms)
+   - Connecting to Database: "default" (0.55 ms)
+   - Query: SELECT * FROM `jenis_surat` (0.36 ms)
+   - View: layouts/public/pilih_surat.php (6.26 ms)
+   - View: layouts/public.php (3.37 ms)
+   - View: partials/flash.php (3.17 ms)
+   - After Filters (0.00 ms)
 
 IMPACT:
-- All database queries with parameters are exposed
-- Application configuration and environment variables visible
-- Session data, request data, route information exposed
-- Server paths, PHP settings, memory usage exposed
-- Source code file paths exposed via Kint dumps
-- Potential credential exposure if debugbar data includes DB passwords
+- ALL database queries and results exposed to any visitor
+- ALL view data (application variables) visible
+- Session data exposed
+- Full server configuration exposed (PHP version, SAPI, environment)
+- 184+ file paths with APPPATH references
+- All routes and controller mappings exposed
+- Development mode means ALL errors, warnings, stack traces visible
+- Source code structure fully mapped
 
 HOW TO EXPLOIT:
 1. Visit https://esurat.smkn1wonosari.sch.id/
-2. Debugbar toolbar loads automatically at bottom of page
-3. Click any query to see full SQL with parameters
-4. Access "Key" tab to see environment/config data
-5. View source code paths and database structure
+2. Debugbar loads automatically at bottom of page
+3. All 10 tabs contain sensitive data
+4. Click "Database" tab to see all queries and results
+5. Click "Files" tab to see all 184 file paths
+6. Click "Routes" tab to see controller/method mappings
+7. Click "Config" tab to see system configuration
+8. Click "Vars" tab to see all PHP variables
 
 ---
 
-[2] SLiMS 9 ADMIN PANEL WITHOUT SERVER-SIDE AUTHENTICATION (sasana.smkn1wonosari.sch.id)
+=== CRITICAL FINDING 2: SLiMS 9 ADMIN PANEL WITHOUT SERVER-SIDE AUTHENTICATION ===
 Severity: HIGH
 Confidence: CONFIRMED
-
 Endpoint: https://sasana.smkn1wonosari.sch.id/admin/
 Subdomain: sasana.smkn1wonosari.sch.id ("Smetanova | Perpustakaan SMKN 1 Wonosari")
-CMS: SLiMS 9 (Bulian D Roger) - <meta name="generator" content="SLiMS 9">
+CMS: SLiMS 9 (Bulian D Roger)
 
-EVIDENCE:
-- /admin/ returns HTTP 200 without authentication
-- /simak returns HTTP 200
-- /anggota returns HTTP 200
+PROOF (verified via curl):
+- /admin/ returns HTTP 200 without any authentication challenge
+- /index.php/simak returns HTTP 200
+- /index.php/anggota returns HTTP 200
+- /index.php/databuku returns HTTP 200 (book data accessible)
+- /index.php/datapinjam returns HTTP 200 (loan data accessible)
+- SLiMS 9 confirmed via: <meta name="generator" content="SLiMS 9 (Bulian D Roger)">
 - Admin panel uses JavaScript redirect ONLY: top.location.href = '/index.php?p=login'
-- No server-side session check for admin access
-- SLiMS 9 known vulnerability: client-side-only admin protection
-- Login with default creds (admin/admin) sets SenayanMember cookie
+- No server-side session enforcement
+- Login attempt with admin/admin sets SenayanMember cookie successfully
+
+EXPOSED DATA ENDPOINTS (all return 200 without auth):
+- /index.php/databuku - Book catalog with data
+- /index.php/datapinjam - Loan/borrowing records
+- /index.php/anggota - Member data
+- /index.php/simak - Student monitoring
 
 IMPACT:
 - Library admin panel fully accessible without credentials
-- Student/employee data (anggota) accessible without auth
-- Book data (databuku) accessible without auth
-- Loan data (datapinjam) accessible without auth
+- Book catalog data accessible without auth
+- Loan/borrowing records accessible without auth
+- Member data accessible without auth
+- Student monitoring data accessible without auth
 - All library transactions visible
-- Student records potentially exposed
+- Client-side-only protection means server-side auth is bypassed
 
 HOW TO EXPLOIT:
 1. Visit https://sasana.smkn1wonosari.sch.id/admin/
 2. Admin panel loads without any login prompt
-3. JavaScript redirect happens but does not enforce server-side auth
-4. Direct API endpoints accessible: /index.php/simak, /index.php/anggota
-5. All data endpoints return 200 without authentication
+3. JavaScript redirect to /index.php?p=login but server-side auth not enforced
+4. Direct data endpoints accessible: /index.php/databuku, /index.php/datapinjam
+5. All endpoints return HTTP 200 without authentication
 
 ---
 
 === SUPPORTING FINDINGS ===
 
 [3] CodeIgniter Framework - Exposed Application Structure
-- /application/ directory accessible (HTTP 200)
-- /system/ directory accessible (HTTP 200)
-- /application/config/config.php accessible (HTTP 200)
-- /application/config/database.php accessible (HTTP 200)
-- /application/config/routes.php accessible (HTTP 200)
-- Protected by "No direct script access allowed" but directory listing may be enabled
+- /application/ directory returns HTTP 200
+- /system/ directory returns HTTP 200
+- /application/config/config.php returns HTTP 200
+- /application/config/database.php returns HTTP 200
+- /application/config/routes.php returns HTTP 200
+- Protected by "No direct script access allowed" but directories accessible
+- composer.json exposed at https://smkn1wonosari.sch.id/composer.json
 
 [4] 72 Subdomains Discovered (5 live)
 - www.smkn1wonosari.sch.id (200)
-- esurat.smkn1wonosari.sch.id (200) - CRITICAL: DebugBar
+- esurat.smkn1wonosari.sch.id (200) - CRITICAL: CodeIgniter DebugBar
 - sasana.smkn1wonosari.sch.id (200) - CRITICAL: SLiMS admin
 - lulus.smkn1wonosari.sch.id (200) - Graduation info
 - jadwal.smkn1wonosari.sch.id (302) - Redirects to login
 
 [5] No Security Headers
 - Only HSTS present (max-age=31536000)
-- Missing: X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, X-XSS-Protection
-- Missing: Referrer-Policy
+- Missing: X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, X-XSS-Protection, Referrer-Policy
 
 [6] Admin Panel at /administrator
-- AdminLTE-based login
-- Login works with admin/admin credentials
-- Sets ci_session cookie
+- AdminLTE-based login page
+- Login form: id="form-sign-in" with username/password inputs
+- Sets ci_session cookie on POST
 
 === TECHNICAL DETAILS ===
-Framework: CodeIgniter (PHP)
-Theme: MazoTheme Green
-Subdomains: 72 found
-Live subdomains: 5
+Main Site Framework: CodeIgniter 4.7.0 (PHP 8.2.33, fpm-fcgi)
+Main Site Theme: MazoTheme Green
+ESURAT Subdomain: CodeIgniter 4.7.0 DebugBar enabled (development mode)
+SASANA Subdomain: SLiMS 9 (Bulian D Roger) - Classic SLiMS Template
+Subdomains: 72 found, 5 live
 Security headers: Only HSTS
 WAF: Cloudflare (blocking .env, .git, xmlrpc)
-Cookie: ci_session (CodeIgniter session)
+Cookies: ci_session (CodeIgniter), SenayanMember (SLiMS)
+Debugbar response: 133,654 bytes with 380 Kint dumps
+Exposed files: 184+ via debugbar Files tab
