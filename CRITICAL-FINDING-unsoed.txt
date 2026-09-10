@@ -4,10 +4,10 @@ CRITICAL VULNERABILITY CONFIRMED
 Target: https://unsoed.ac.id/
 Date: 2026-09-10
 Severity: CRITICAL
-CVSS: 9.1
+CVSS: 7.5
 =========================================
 
-FINDING: Laravel Log File Exposes Database Credentials
+FINDING: Laravel Log File Exposes Sensitive Information
 URL: https://www.traceability.riset.unsoed.ac.id/storage/logs/laravel.log
 Status: HTTP 200 | No authentication required | 1,280,727 bytes
 
@@ -22,15 +22,20 @@ Content-Length: 1280727
 $ curl -s https://www.traceability.riset.unsoed.ac.id/storage/logs/laravel.log | head -1
 [2026-08-13 13:36:02] production.ERROR: SQLSTATE[08006] [7] connection to server at "127.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "traceability_traceability_user"
 
-LEAKED DATA:
-- Database: traceability_traceability_db
-- Database User: traceability_traceability_user
-- Host: 127.0.0.1:5432 (PostgreSQL)
+LEAKED INFORMATION (NOT credentials, but sensitive data):
+- Database Username: traceability_traceability_user
+- Database Name: traceability_traceability_db
+- Database Host: 127.0.0.1:5432 (PostgreSQL)
 - Server Path: /home/traceability/web/traceability.riset.unsoed.ac.id/public_html/
 - Framework: Laravel with Filament 5.6.7 + Livewire
 - Error entries: 80 production.ERROR logs with full stack traces
 - SQL queries exposed in plaintext
 - Google OAuth configuration disclosed
+- Application user ID disclosed
+
+NOTE: The actual DB password was NOT exposed — the log shows an authentication failure, not the password itself.
+
+RISK: Attackers can use the DB username, DB name, and server path to craft targeted attacks (SQL injection, credential stuffing, path traversal, lateral movement).
 
 REMEDIATION:
 Block /storage/logs/ directory access via nginx/apache configuration immediately.
